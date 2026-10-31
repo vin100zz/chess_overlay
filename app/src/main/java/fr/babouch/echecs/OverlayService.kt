@@ -399,11 +399,11 @@ class OverlayService : Service() {
         arrowView?.board = rect.toRectF()
         arrowView?.arrows = emptyList()
         if (error != null) {
-            showStatus("Position non valide : $error\n${pos.toFen()}\n(vérifiez le sens ⇅ ou recalibrez)")
+            showStatus("Position non valide : $error\n(vérifiez le sens ⇅ ou recalibrez)")
             return
         }
         busy = true
-        showStatus("Analyse… (${sideName(whiteToMove)} au trait)")
+        showStatus("Analyse…")
         val multi = prefs.multiPv.coerceIn(1, 3)
         val time = prefs.moveTimeMs
         val fen = pos.toFen()
@@ -429,8 +429,8 @@ class OverlayService : Service() {
             return
         }
         val arrows = ArrayList<ArrowView.Arrow>()
-        val sb = StringBuilder()
-        sb.append(sideName(pos.whiteToMove)).append(" au trait :\n")
+        // Une ligne par coup : la pastille de la couleur de sa flèche et l'évaluation (point de vue des blancs).
+        val evals = ArrayList<String>()
         for ((i, line) in lines.withIndex()) {
             val move = line.pv.first()
             val from = Position.squareIndex(move.substring(0, 2))
@@ -445,17 +445,11 @@ class OverlayService : Service() {
                     rect.square * ARROW_WIDTHS[i],
                 )
             }
-            sb.append(COLOR_NAMES.getOrElse(i) { "" }).append(' ')
-                .append(pos.describe(move)).append("   ")
-                .append(line.scoreText(pos.whiteToMove))
-                .append("  (prof. ").append(line.depth).append(")\n")
+            evals += COLOR_NAMES.getOrElse(i) { "" } + "  " + line.scoreText(pos.whiteToMove)
         }
-        sb.append(pos.toFen())
         arrowView?.arrows = arrows
-        showStatus(sb.toString())
+        showStatus(evals.joinToString("\n"))
     }
-
-    private fun sideName(white: Boolean) = if (white) "Blancs" else "Noirs"
 
     private fun fail(msg: String) {
         busy = false
