@@ -8,12 +8,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Icon
+import android.graphics.drawable.RippleDrawable
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.Image
@@ -25,6 +27,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.Gravity
@@ -32,7 +38,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import fr.babouch.echecs.core.BoardDetector
@@ -399,11 +404,11 @@ class OverlayService : Service() {
         arrowView?.board = rect.toRectF()
         arrowView?.arrows = emptyList()
         if (error != null) {
-            showStatus("Position non valide : $error\n${pos.toFen()}\n(vérifiez le sens ⇅ ou recalibrez)")
+            showStatus("Position non valide : $error\n(vérifiez le sens ⇅ ou recalibrez)")
             return
         }
         busy = true
-        showStatus("Analyse… (${sideName(whiteToMove)} au trait)")
+        showStatus("Analyse…")
         val multi = prefs.multiPv.coerceIn(1, 3)
         val time = prefs.moveTimeMs
         val fen = pos.toFen()
@@ -429,8 +434,9 @@ class OverlayService : Service() {
             return
         }
         val arrows = ArrayList<ArrowView.Arrow>()
-        val sb = StringBuilder()
-        sb.append(sideName(pos.whiteToMove)).append(" au trait :\n")
+        // Toutes les évaluations sur une ligne, chacune précédée d'une pastille de la couleur de sa flèche
+        // (point de vue des blancs).
+        val evals = SpannableStringBuilder()
         for ((i, line) in lines.withIndex()) {
             val move = line.pv.first()
             val from = Position.squareIndex(move.substring(0, 2))
@@ -445,17 +451,19 @@ class OverlayService : Service() {
                     rect.square * ARROW_WIDTHS[i],
                 )
             }
-            sb.append(COLOR_NAMES.getOrElse(i) { "" }).append(' ')
-                .append(pos.describe(move)).append("   ")
-                .append(line.scoreText(pos.whiteToMove))
-                .append("  (prof. ").append(line.depth).append(")\n")
+            if (i > 0) evals.append("   ")
+            val dot = evals.length
+            evals.append("● ")
+            evals.setSpan(
+                ForegroundColorSpan(DOT_COLORS[i % DOT_COLORS.size]), dot, dot + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            val score = evals.length
+            evals.append(line.scoreText(pos.whiteToMove))
+            evals.setSpan(StyleSpan(Typeface.BOLD), score, evals.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        sb.append(pos.toFen())
         arrowView?.arrows = arrows
-        showStatus(sb.toString())
+        showStatus(evals)
     }
-
-    private fun sideName(white: Boolean) = if (white) "Blancs" else "Noirs"
 
     private fun fail(msg: String) {
         busy = false
@@ -539,15 +547,22 @@ class OverlayService : Service() {
         )
         details.addView(status, wrap())
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun button(label: String, action: () -> Unit) = Button(this).apply {
+        // Boutons en « pastilles » translucides assorties au panneau, avec effet d'onde au toucher.
+        fun button(label: String, action: () -> Unit) = TextView(this).apply {
             text = label
-            setAllCaps(false)
-            textSize = 12f
-            minWidth = 0
-            minimumWidth = 0
-            setPadding(dp(8f), 0, dp(8f), 0)
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(dp(12f), dp(7f), dp(12f), dp(7f))
+            val pill = GradientDrawable().apply {
+                cornerRadius = dp(16f).toFloat()
+                setColor(0x26FFFFFF)
+                setStroke(dp(1f), 0x33FFFFFF)
+            }
+            background = RippleDrawable(ColorStateList.valueOf(0x55FFFFFF), pill, null)
+            isClickable = true
             setOnClickListener { action() }
-            buttons.addView(this)
+            buttons.addView(this, wrap().apply { if (buttons.childCount > 0) marginStart = dp(6f) })
         }
         button("⇄ Trait") {
             if (!busy && lastScreen != null) {
@@ -568,7 +583,7 @@ class OverlayService : Service() {
             arrowView?.arrows = emptyList()
             arrowView?.board = null
         }
-        details.addView(buttons, wrap())
+        details.addView(buttons, wrap().apply { topMargin = dp(8f) })
         root.addView(details, wrap().apply { topMargin = dp(4f) })
 
         panelParams = overlayParams(
@@ -616,7 +631,7 @@ class OverlayService : Service() {
         if (::details.isInitialized) details.visibility = View.VISIBLE
     }
 
-    private fun showStatus(text: String) {
+    private fun showStatus(text: CharSequence) {
         if (!::status.isInitialized) return
         expand()
         status.text = text
@@ -629,4 +644,5 @@ class OverlayService : Service() {
     }
 }
 
-private val COLOR_NAMES = listOf("🟢", "🔵", "🟠")
+/** Couleurs des pastilles devant chaque évaluation : celles des flèches, opaques. */
+private val DOT_COLORS = intArrayOf(0xFF00C853.toInt(), 0xFF2979FF.toInt(), 0xFFFF9100.toInt())
