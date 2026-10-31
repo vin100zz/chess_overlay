@@ -90,4 +90,46 @@ class CoreTest {
     @Test
     fun reconnaissanceNoirsEnBas() =
         checkRecognition(false, SyntheticBoard.Layout(width = 720, height = 1600, boardX = 12, boardY = 401, boardSize = 696))
+
+    private fun play(board: CharArray, vararg moves: String): CharArray {
+        val b = board.copyOf()
+        for (m in moves) {
+            val from = Position.squareIndex(m.substring(0, 2))!!
+            val to = Position.squareIndex(m.substring(2, 4))!!
+            b[to] = if (m.length > 4) m[4] else b[from]
+            b[from] = '.'
+        }
+        return b
+    }
+
+    @Test
+    fun quiAJoue() {
+        assertEquals(Mover.NONE, MoveDiff.mover(start, start))
+        val e4 = play(start, "e2e4")
+        assertEquals(Mover.WHITE, MoveDiff.mover(start, e4))
+        assertEquals(Mover.BLACK, MoveDiff.mover(e4, play(e4, "e7e5")))
+        assertEquals(Mover.BOTH, MoveDiff.mover(start, play(start, "e2e4", "e7e5")))
+        // Prise, roque, promotion avec prise, prise en passant.
+        assertEquals(Mover.WHITE, MoveDiff.mover(middle, play(middle, "c4f7")))
+        assertEquals(Mover.WHITE, MoveDiff.mover(middle, play(middle, "e1g1", "h1f1")))
+        val promo = boardFromFen("1n2k3/P7/8/8/8/8/8/4K3")
+        assertEquals(Mover.WHITE, MoveDiff.mover(promo, play(promo, "a7b8Q")))
+        val ep = boardFromFen("4k3/8/8/3Pp3/8/8/8/4K3")
+        assertEquals(Mover.WHITE, MoveDiff.mover(ep, play(ep, "d5e6").also { it[36] = '.' }))
+        // Autre position : inexplicable par un ou deux coups.
+        assertEquals(Mover.UNKNOWN, MoveDiff.mover(start, middle))
+    }
+
+    @Test
+    fun surveillanceEcran() {
+        val layout = SyntheticBoard.Layout()
+        val rect = BoardDetector.detect(SyntheticBoard.render(start, true, layout))!!
+        val a = ScreenDiff.sample(SyntheticBoard.render(start, true, layout), rect)
+        assertEquals(0, ScreenDiff.changedSquares(a, ScreenDiff.sample(SyntheticBoard.render(start, true, layout), rect)))
+        val b = ScreenDiff.sample(SyntheticBoard.render(play(start, "g1f3"), true, layout), rect)
+        assertEquals(2, ScreenDiff.changedSquares(a, b))
+        // Surlignage du dernier coup en plus : toujours les 2 mêmes cases.
+        val c = ScreenDiff.sample(SyntheticBoard.render(play(start, "g1f3"), true, layout, highlight = setOf(6, 21)), rect)
+        assertEquals(2, ScreenDiff.changedSquares(a, c))
+    }
 }

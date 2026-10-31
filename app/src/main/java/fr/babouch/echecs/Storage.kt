@@ -26,6 +26,11 @@ class Prefs(context: Context) {
         get() = sp.getInt("orientation", 0)
         set(v) = sp.edit().putInt("orientation", v).apply()
 
+    /** Suivi automatique : relancer l'analyse dès qu'un coup est joué à l'écran. */
+    var autoFollow: Boolean
+        get() = sp.getBoolean("auto_follow", true)
+        set(v) = sp.edit().putBoolean("auto_follow", v).apply()
+
     /** Sens de l'échiquier lors de la dernière calibration (sert quand le sens automatique hésite). */
     var lastCalibrationWhiteAtBottom: Boolean
         get() = sp.getBoolean("calib_white_bottom", true)
