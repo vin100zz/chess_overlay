@@ -30,9 +30,9 @@ Le téléphone doit être en ARM 64 bits (quasiment tous les téléphones depuis
 3. **Calibrer, une fois par jeu de pièces** : dans l'appli d'échecs, afficher une position initiale
    (nouvelle partie, échiquier d'analyse…), toucher ♞ puis **Calibrer**. L'appli apprend le dessin des pièces.
    Plusieurs applis ou thèmes peuvent être calibrés : toutes les calibrations sont utilisées.
-4. **Analyser** : toucher ♞. Flèche verte = meilleur coup, bleue = 2ᵉ, orange = 3ᵉ. Le panneau affiche les
-   coups en notation française (C = cavalier, F = fou, T = tour, D = dame, R = roi), l'évaluation
-   (point de vue des blancs) et la position FEN.
+4. **Analyser** : toucher ♞. Flèche verte = meilleur coup, bleue = 2ᵉ, orange = 3ᵉ. Le panneau affiche, sur
+   une ligne, l'évaluation de chaque coup (point de vue des blancs), précédée d'une pastille de la couleur
+   de sa flèche.
    - Par défaut, c'est au camp **du bas** de jouer. **⇄ Trait** change le camp au trait.
    - **⇅ Sens** retourne l'échiquier si le sens (blancs en bas / noirs en bas) a été mal deviné.
    - **✕** efface les flèches (et arrête le suivi automatique).
