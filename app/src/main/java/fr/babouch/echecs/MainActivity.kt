@@ -136,7 +136,10 @@ class MainActivity : Activity() {
             "Touchez la bulle ♞ : l'échiquier est lu, Stockfish calcule, et les meilleurs coups s'affichent " +
                 "en flèches (vert = meilleur, puis bleu, puis orange). Par défaut c'est au camp du bas de jouer ; " +
                 "« ⇄ Trait » change le camp au trait, « ⇅ Sens » retourne l'échiquier si le sens a été mal deviné. " +
-                "Faites glisser la bulle pour la déplacer.",
+                "Faites glisser la bulle pour la déplacer.\n\n" +
+                "Suivi automatique (bouton « Auto » du panneau) : après la première analyse, l'appli surveille " +
+                "l'échiquier ; dès qu'un coup est joué, elle relit la position et, quand c'est au camp du bas " +
+                "de jouer, affiche directement les nouveaux meilleurs coups. « ✕ » arrête le suivi, ♞ le relance.",
         )
 
         heading("Réglages")
@@ -146,6 +149,10 @@ class MainActivity : Activity() {
         }
         para("Nombre de coups proposés")
         radio(col, listOf("1" to 1, "2" to 2, "3" to 3), prefs.multiPv) { prefs.multiPv = it }
+        para("Suivi automatique des coups")
+        radio(col, listOf("Activé" to 1, "Désactivé" to 0), if (prefs.autoFollow) 1 else 0) {
+            prefs.autoFollow = it == 1
+        }
         para("Sens de l'échiquier")
         radio(col, listOf("Auto" to 0, "Blancs en bas" to 1, "Noirs en bas" to 2), prefs.orientation) {
             prefs.orientation = it

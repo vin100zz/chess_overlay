@@ -35,10 +35,19 @@ Le téléphone doit être en ARM 64 bits (quasiment tous les téléphones depuis
    (point de vue des blancs) et la position FEN.
    - Par défaut, c'est au camp **du bas** de jouer. **⇄ Trait** change le camp au trait.
    - **⇅ Sens** retourne l'échiquier si le sens (blancs en bas / noirs en bas) a été mal deviné.
-   - **✕** efface les flèches.
+   - **✕** efface les flèches (et arrête le suivi automatique).
+5. **Suivi automatique** (bouton **Auto ✓ / Auto ✗** du panneau, activé par défaut) : après la première
+   analyse, plus besoin de toucher ♞. L'appli surveille l'échiquier à l'écran ; dès qu'un coup a été joué
+   (et que l'animation est terminée), elle relit la position et déduit qui vient de jouer :
+   - si c'est au camp du bas de jouer (l'adversaire vient de jouer), les nouveaux meilleurs coups
+     s'affichent directement ;
+   - si c'est le camp du bas qui vient de jouer, les flèches sont effacées en attendant la réponse
+     (**⇄ Trait** pour analyser quand même).
+   Le trait est ainsi suivi automatiquement au fil de la partie. Si l'échiquier disparaît de l'écran,
+   le suivi s'arrête : touchez ♞ pour le relancer.
 
-Réglages dans l'appli : temps de réflexion (0,5 à 8 s), nombre de coups (1 à 3), sens de l'échiquier
-(auto / forcé).
+Réglages dans l'appli : temps de réflexion (0,5 à 8 s), nombre de coups (1 à 3), suivi automatique
+(activé / désactivé), sens de l'échiquier (auto / forcé).
 
 ## Comment ça marche
 
@@ -46,6 +55,7 @@ Réglages dans l'appli : temps de réflexion (0,5 à 8 s), nombre de coups (1 à
 |---|---|
 | Capture de l'écran (MediaProjection, service au premier plan), bulle et panneau flottants | `app/.../OverlayService.kt` |
 | Recherche de l'échiquier : le carré dont les coins des cases forment le meilleur damier clair/foncé, puis calage précis sur les bords des cases | `core/.../BoardDetector.kt` |
+| Suivi automatique : quelques points relevés par case toutes les 350 ms (overlay compris, sans le masquer) ; quand ≥ 2 cases ont changé et que l'image est stable, relecture complète puis déduction du camp qui a joué | `core/.../ChangeDetection.kt`, `app/.../OverlayService.kt` |
 | Reconnaissance des pièces : « signature » de chaque case (forme de la pièce une fois le fond retiré, et sa couleur), comparée aux cases apprises sur la position initiale | `core/.../PieceRecognizer.kt` |
 | Position, FEN, roques déduits, vérification de légalité, notation française | `core/.../Chess.kt` |
 | Dialogue UCI avec Stockfish (binaire officiel `sf_17.1` ARM64, téléchargé à la compilation) | `app/.../StockfishEngine.kt`, `core/.../Uci.kt` |

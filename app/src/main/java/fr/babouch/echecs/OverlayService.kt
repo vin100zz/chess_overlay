@@ -25,6 +25,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.Gravity
@@ -39,10 +40,14 @@ import fr.babouch.echecs.core.BoardDetector
 import fr.babouch.echecs.core.BoardRect
 import fr.babouch.echecs.core.CalibrationException
 import fr.babouch.echecs.core.EngineLine
+import fr.babouch.echecs.core.MoveDiff
+import fr.babouch.echecs.core.Mover
 import fr.babouch.echecs.core.Orientation
 import fr.babouch.echecs.core.PieceRecognizer
 import fr.babouch.echecs.core.Position
 import fr.babouch.echecs.core.RgbImage
+import fr.babouch.echecs.core.ScreenDiff
+import fr.babouch.echecs.core.Template
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -67,6 +72,12 @@ class OverlayService : Service() {
 
         private val ARROW_COLORS = intArrayOf(0xE000C853.toInt(), 0xC02979FF.toInt(), 0xB0FF9100.toInt())
         private val ARROW_WIDTHS = floatArrayOf(0.20f, 0.15f, 0.12f)
+
+        /** Intervalle de surveillance de l'échiquier en suivi automatique. */
+        private const val WATCH_INTERVAL_MS = 350L
+
+        /** Après un changement de l'overlay, délai avant de reprendre un relevé de référence. */
+        private const val WATCH_SETTLE_MS = 500L
     }
 
     private lateinit var wm: WindowManager
@@ -93,7 +104,32 @@ class OverlayService : Service() {
     private lateinit var panelParams: WindowManager.LayoutParams
     private lateinit var details: LinearLayout
     private lateinit var status: TextView
+    private lateinit var autoButton: Button
+
+    /** Lecture ou analyse en cours (écrit sur le thread principal, lu aussi par le thread de capture). */
+    @Volatile
     private var busy = false
+
+    // Suivi automatique : l'échiquier surveillé (null = pas de suivi) et la pause après un changement
+    // de l'overlay, écrits par le thread principal ; relevés de l'écran, propres au thread de capture.
+    @Volatile
+    private var watchRect: BoardRect? = null
+
+    @Volatile
+    private var watchPausedUntil = 0L
+    private var watchRef: IntArray? = null
+    private var watchPrev: IntArray? = null
+    private val watchPoll = object : Runnable {
+        override fun run() {
+            try {
+                pollBoard()
+            } catch (e: Exception) {
+                watchRef = null
+                watchPrev = null
+            }
+            captureHandler?.postDelayed(this, WATCH_INTERVAL_MS)
+        }
+    }
 
     // Dernière position reconnue (thread principal)
     private var lastScreen: CharArray? = null
@@ -152,7 +188,9 @@ class OverlayService : Service() {
         panel?.let { runCatching { wm.removeView(it) } }
         arrowView = null
         panel = null
+        watchRect = null
         val handler = captureHandler
+        handler?.removeCallbacks(watchPoll)
         virtualDisplay?.release()
         virtualDisplay = null
         projection?.stop()
@@ -187,7 +225,7 @@ class OverlayService : Service() {
         val notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_menu_search)
             .setContentTitle("Analyse d'échecs active")
-            .setContentText("Touchez la bulle ♞ pour analyser l'échiquier affiché.")
+            .setContentText("Touchez la bulle ♞ pour analyser l'échiquier affiché (puis suivi automatique).")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null as Icon?, "Arrêter", stop).build())
             .setOngoing(true)
@@ -237,6 +275,76 @@ class OverlayService : Service() {
             "echecs", w, h, resources.displayMetrics.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.surface, null, handler,
         )
+        handler.postDelayed(watchPoll, WATCH_INTERVAL_MS)
+    }
+
+    // ---------------------------------------------------------------- Suivi automatique
+
+    /**
+     * Thread de capture. Compare l'échiquier à l'écran (overlay compris : les flèches ne bougent pas)
+     * au relevé de référence. Quand au moins deux cases ont changé et que l'image ne bouge plus
+     * (animation du coup terminée), on relit la position.
+     */
+    private fun pollBoard() {
+        val rect = watchRect
+        if (rect == null || busy || SystemClock.uptimeMillis() < watchPausedUntil) {
+            watchRef = null
+            watchPrev = null
+            return
+        }
+        val img = latestImage ?: return
+        val sample = sampleBoard(img, rect)
+        val ref = watchRef
+        val prev = watchPrev
+        watchPrev = sample
+        if (ref == null) {
+            watchRef = sample
+            return
+        }
+        if (prev != null && ScreenDiff.changedSquares(prev, sample) == 0 &&
+            ScreenDiff.changedSquares(ref, sample) >= 2
+        ) {
+            watchRef = null
+            watchPrev = null
+            main.post { onBoardChanged() }
+        }
+    }
+
+    /** Relève quelques points par case directement dans l'image de la capture (thread de capture). */
+    private fun sampleBoard(img: Image, rect: BoardRect): IntArray {
+        val plane = img.planes[0]
+        val buf = plane.buffer
+        val ps = plane.pixelStride
+        val rs = plane.rowStride
+        return ScreenDiff.sample(rect, img.width, img.height) { x, y ->
+            val o = y * rs + x * ps
+            ((buf.get(o).toInt() and 0xFF) shl 16) or
+                ((buf.get(o + 1).toInt() and 0xFF) shl 8) or
+                (buf.get(o + 2).toInt() and 0xFF)
+        }
+    }
+
+    /** L'overlay vient de changer : on attend qu'il soit affiché avant de reprendre une référence. */
+    private fun overlayChanged() {
+        watchPausedUntil = SystemClock.uptimeMillis() + WATCH_SETTLE_MS
+    }
+
+    private fun startWatching(rect: BoardRect) {
+        if (!prefs.autoFollow) return
+        overlayChanged()
+        watchRect = rect
+    }
+
+    private fun stopWatching() {
+        watchRect = null
+    }
+
+    /** Thread principal : l'échiquier a changé à l'écran pendant le suivi automatique. */
+    private fun onBoardChanged() {
+        if (busy || watchRect == null) return
+        val templates = TemplateStore.load(this)
+        if (templates.isEmpty()) return
+        readBoard(templates, auto = true)
     }
 
     /** Copie la dernière image de l'écran (appelé sur le thread de capture). */
@@ -330,31 +438,79 @@ class OverlayService : Service() {
         arrowView?.arrows = emptyList()
         arrowView?.board = null
         showStatus("Lecture de l'échiquier…")
+        readBoard(templates, auto = false)
+    }
+
+    /**
+     * Lit l'échiquier à l'écran puis lance l'analyse. En suivi automatique ([auto]), on déduit de la
+     * position précédente qui vient de jouer : on analyse quand c'est au camp du bas, sinon on attend.
+     */
+    private fun readBoard(templates: List<Template>, auto: Boolean) {
+        val previousWb = whiteAtBottom
         captureThen { img ->
             val rect = findBoard(img)
             if (rect == null) {
-                main.post { fail("Échiquier introuvable à l'écran.") }
+                main.post {
+                    fail(
+                        if (auto) "Échiquier perdu de vue : suivi automatique arrêté.\nTouchez ♞ pour reprendre."
+                        else "Échiquier introuvable à l'écran.",
+                    )
+                }
                 return@captureThen
             }
             val screen = PieceRecognizer.recognize(img, rect, templates)
-            val wb = when (prefs.orientation) {
-                1 -> true
-                2 -> false
+            val wb = when {
+                prefs.orientation == 1 -> true
+                prefs.orientation == 2 -> false
+                // En suivi, on garde le sens de la lecture précédente (éventuellement corrigé avec ⇅).
+                auto -> previousWb
                 else -> PieceRecognizer.guessWhiteAtBottom(screen) ?: prefs.lastCalibrationWhiteAtBottom
             }
-            main.post {
-                lastRect = rect
-                lastScreen = screen
-                whiteAtBottom = wb
-                whiteToMove = wb // par défaut, c'est au camp du bas (le vôtre) de jouer
-                busy = false
-                runEngine()
-            }
+            main.post { onBoardRead(rect, screen, wb, auto) }
+        }
+    }
+
+    private fun onBoardRead(rect: BoardRect, screen: CharArray, wb: Boolean, auto: Boolean) {
+        val previous = lastScreen
+        val previousWb = whiteAtBottom
+        val previousWhiteToMove = whiteToMove
+        lastRect = rect
+        lastScreen = screen
+        whiteAtBottom = wb
+        busy = false
+        startWatching(rect)
+        if (!auto) {
+            whiteToMove = wb // par défaut, c'est au camp du bas (le vôtre) de jouer
+            runEngine()
+            return
+        }
+        val mover = if (previous != null && previousWb == wb) {
+            MoveDiff.mover(Orientation.toBoard(previous, wb), Orientation.toBoard(screen, wb))
+        } else {
+            Mover.UNKNOWN
+        }
+        whiteToMove = when (mover) {
+            Mover.NONE -> return // rien n'a bougé sur l'échiquier (surlignage, overlay déplacé…)
+            Mover.WHITE -> false
+            Mover.BLACK -> true
+            Mover.BOTH -> previousWhiteToMove // un coup de chaque camp : même camp au trait qu'avant
+            Mover.UNKNOWN -> wb
+        }
+        if (whiteToMove == wb) {
+            runEngine()
+        } else {
+            // Le camp du bas vient de jouer : les flèches sont périmées, on attend la réponse.
+            arrowView?.arrows = emptyList()
+            showStatus(
+                "Coup des ${sideName(!whiteToMove)} joué.\n" +
+                    "En attente du coup des ${sideName(whiteToMove)}…\n(⇄ Trait pour analyser quand même)",
+            )
         }
     }
 
     private fun calibrate() {
         if (busy) return
+        stopWatching()
         arrowView?.arrows = emptyList()
         arrowView?.board = null
         showStatus("Calibration…")
@@ -459,6 +615,7 @@ class OverlayService : Service() {
 
     private fun fail(msg: String) {
         busy = false
+        stopWatching()
         expand()
         showStatus(msg)
     }
@@ -562,8 +719,23 @@ class OverlayService : Service() {
                 runEngine()
             }
         }
+        autoButton = button(autoLabel()) {
+            prefs.autoFollow = !prefs.autoFollow
+            autoButton.text = autoLabel()
+            val rect = lastRect
+            if (!prefs.autoFollow) {
+                stopWatching()
+                showStatus("Suivi automatique désactivé : touchez ♞ pour analyser.")
+            } else if (rect != null && !busy) {
+                startWatching(rect)
+                showStatus("Suivi automatique activé : l'analyse se relance dès qu'un coup est joué.")
+            } else {
+                showStatus("Suivi automatique activé : touchez ♞ une fois pour le lancer.")
+            }
+        }
         button("Calibrer") { calibrate() }
         button("✕") {
+            stopWatching()
             details.visibility = View.GONE
             arrowView?.arrows = emptyList()
             arrowView?.board = null
@@ -602,6 +774,7 @@ class OverlayService : Service() {
                         panelParams.x = startX + dx.toInt()
                         panelParams.y = startY + dy.toInt()
                         panel?.let { wm.updateViewLayout(it, panelParams) }
+                        overlayChanged()
                     }
                 }
                 MotionEvent.ACTION_UP -> if (!dragging) analyze()
@@ -618,11 +791,15 @@ class OverlayService : Service() {
 
     private fun showStatus(text: String) {
         if (!::status.isInitialized) return
+        overlayChanged()
         expand()
         status.text = text
     }
 
+    private fun autoLabel() = if (prefs.autoFollow) "Auto ✓" else "Auto ✗"
+
     private fun setOverlayVisible(visible: Boolean) {
+        overlayChanged()
         val v = if (visible) View.VISIBLE else View.INVISIBLE
         arrowView?.visibility = v
         panel?.visibility = v
