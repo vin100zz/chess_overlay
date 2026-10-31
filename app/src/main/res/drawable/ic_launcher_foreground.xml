@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône « Le viseur », premier plan : le cavalier pris dans un viseur, balayé par une ligne verte. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Coins du viseur (zone 27..81 du calque de 108 dp). -->
+    <path
+        android:strokeColor="#FF263238"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M38,27H27V38M70,27H81V38M38,81H27V70M70,81H81V70" />
+    <!-- Cavalier : glyphe ♞ de DejaVu Sans (licence libre), normalisé dans un carré de 100. -->
+    <group
+        android:translateX="35"
+        android:translateY="35"
+        android:scaleX="0.38"
+        android:scaleY="0.38">
+        <path
+            android:fillColor="#FF263238"
+            android:pathData="M41.44 16.18Q43.92 14.64 43.92 12.03Q43.92 10.36 42.91 8.46Q41.91 6.55 41.91 5.08Q41.91 2.01 45.79 0Q51.47 5.41 51.97 8.39Q52.47 11.36 52.47 12.23Q52.47 15.37 50.2 16.18H50.47Q50.47 16.24 50.33 16.24Q86.16 38.97 89.17 100H24.33Q23.46 96.26 23.46 92.38Q23.46 81.68 37 72.23Q50.53 62.77 50.53 55.21Q50.53 54.68 50.47 54.21Q46.06 65.37 38.24 65.37Q38.24 65.37 37.57 65.37Q31.55 75.13 24.67 75.13Q24.4 75.13 24.2 75.13L27.41 68.18L20.25 73.53Q12.63 71.66 10.83 66.11Q16.71 50.8 16.71 38.1Q16.71 36.3 16.58 34.56Q19.79 27.27 26.4 20.32Q26.6 19.65 26.6 19.05Q26.6 17.18 25.1 16.31Q23.6 15.44 23.6 13.1Q23.6 10.63 24.93 6.22Q31.89 8.02 35.63 16.18ZM24.26 33.22V34.29Q24.53 36.3 25.07 36.3H26.47Q31.08 36.3 31.08 33.02Q31.08 30.75 33.96 27.54H33.56Q27.14 27.54 24.67 31.82ZM16.98 63.3V64.91Q16.98 66.84 18.85 66.84H19.52Q24.33 65.84 24.33 62.3L23.86 60.03Q19.72 60.03 16.98 63.3ZM50.27 21.52 53.74 27.47Q78.81 45.45 79.21 96.52H84.36Q81.35 39.71 50.27 21.52Z" />
+    </group>
+    <!-- Halo vert au-dessus de la ligne de balayage. -->
+    <path android:pathData="M31,50H77V62H31Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="50"
+                android:endX="0"
+                android:endY="62"
+                android:startColor="#0000C853"
+                android:endColor="#5900C853" />
+        </aapt:attr>
+    </path>
+    <!-- Ligne de balayage. -->
+    <path
+        android:strokeColor="#FF00C853"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:pathData="M31,62H77" />
+</vector>
